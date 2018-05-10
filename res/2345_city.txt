@@ -1,4 +1,4 @@
-var prov=new Array();
+﻿var prov=new Array();
 prov[12] = '12-B 北京-12';
 prov[37] = '37-T 天津-37';
 prov[34] = '34-S 上海-34';
