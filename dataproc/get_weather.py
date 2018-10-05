@@ -8,6 +8,8 @@ import json
 from logging import codecs
 import demjson
 import datetime
+import time
+import re
 
 def alg_indexof(lst, key, keyof):
     
@@ -49,7 +51,40 @@ class weather_parser():
         url = 'http://tianqi.2345.com/t/wea_history/js/%s/%s_%s.js'%(month, self.__city, month)
         res = requests.get(url)
         soup = BeautifulSoup(res.text, "html.parser")
-        return demjson.decode(re.split('[=;]', soup.string)[1])['tqInfo']
+        retinfo = demjson.decode(re.split('[=;]', soup.string)[1])['tqInfo']
+        retinfo = [ x for x in retinfo if x != {} ]
+        ##fix future weather info.
+        y, m, d = retinfo[-1]['ymd'].split('-')
+        if datetime.date.today() >= datetime.date(int(y), int(m), int(d)):
+            for i in range(int(self.__end.split('-')[2]) - int(str(datetime.date.today()).split('-')[2]) + 1):
+                
+                weainfo = {'ymd':str(datetime.date.today() + datetime.timedelta(days=i))}
+                
+                allinfo = BeautifulSoup(requests.get(self.__future[i]%(self.__city)).content, "html.parser")
+                timeinfo = allinfo.find('div', 'time-main')
+                timeinfo2 = allinfo.find('div', 'filter')
+                
+                night = timeinfo.find('dl', 'night')
+                temperature = night.find('span', 'temperature')
+                weainfo['yWendu'] = re.search('\d+', temperature.get_text()).group()
+                phrase0 = night.find('span', 'phrase').get_text()
+                
+                day = timeinfo.find('dl', 'day')
+                temperature = day.find('span', 'temperature')
+                weainfo['bWendu'] = re.search('\d+', temperature.get_text()).group()
+                phrase1 = day.find('span', 'phrase').get_text()
+                
+                weainfo['tianqi'] = '%s~%s'%(phrase0, phrase1) if phrase0 != phrase1 else phrase0
+                
+                timeinfo2 = [x.get_text() for x in timeinfo2.find_all('li')]
+                try: weainfo['fengxiang'] = [x for x in timeinfo2 if '风向：' in x][0].split('：')[1]
+                except: weainfo['fengxiang'] = 'N/A'
+                try: weainfo['fengli'] = [x for x in timeinfo2 if '风力：' in x][0].split('：')[1]
+                except: weainfo['fengli'] = 'N/A'
+                
+                retinfo.append(weainfo)
+    
+        return retinfo
     
     def __subweatherlist(self, wlist):
         
@@ -63,11 +98,12 @@ class weather_parser():
         
         retlist = []
         starts = self.__start.split('-')
+        ends = self.__end.split('-')
         retlist = [ x for x in self.__month_value(starts[0] + starts[1]) if x != {} ]
-        if self.__end != self.__start:
+        if starts[1] != ends[1]:
             ends = self.__end.split('-')
             retlist = retlist + [ x for x in self.__month_value(ends[0] + ends[1]) if x != {} ]
-        print self.__subweatherlist(retlist)
+        return self.__subweatherlist(retlist)
         
 class city_paser():
     
@@ -108,5 +144,5 @@ class city_paser():
             return self.__cityjs[self.__city.decode('utf-8')]
         
 if __name__ == '__main__':
-    
-    print weather_parser(city_paser('金堂').value(), '2018-04-30', '2018-05-15').value()
+    weather_parser(city_paser('游仙').value(), '2018-05-20', '2018-05-31').value()
+    #print json.dumps(weather_parser(city_paser('游仙').value(), '2018-05-20', '2018-05-30').value(), ensure_ascii=False, indent=4)
